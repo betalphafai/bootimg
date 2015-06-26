@@ -15,7 +15,8 @@ from hashlib import sha1
 latin = lambda x: x.encode('latin')
 
 def write_bootimg(output, kernel, ramdisk, second, dtimg,
-        name, cmdline, kernel_addr, ramdisk_addr, second_addr, tags_addr, page_size, padding_size):
+        name, cmdline, kernel_addr, ramdisk_addr, second_addr, tags_addr,
+        seAndroid, page_size, padding_size):
     ''' make C8600-compatible bootimg.
         output: file object
         kernel, ramdisk, second: file object or string
@@ -80,9 +81,15 @@ def write_bootimg(output, kernel, ramdisk, second, dtimg,
     writecontent(output, ramdisk)
     writecontent(output, second)
     writecontent(output, dtimg)
+    lastpos = output.tell()
+
     # fill back sha1
     output.seek(idpos, 0)
     output.write(sha.digest())
+
+    output.seek(lastpos, 0)
+    writecontent(output, seAndroid)
+
     if hasattr('output', 'close'):
         output.close()
 
@@ -175,13 +182,13 @@ def parse_bootimg(bootimg):
         output.close()
         bootimg.seek(padding(dt_size), 1)
 
-    unknown = bootimg.read()
-    if unknown:
-        output = open('unknown', 'wb')
-        output.write(unknown)
+    seAndroid = bootimg.read()
+    if seAndroid:
+        output = open('seAndroid', 'wb')
+        output.write(seAndroid)
         output.close()
     else:
-        os.unlink('unknown')
+        os.unlink('seAndroid')
 
     bootimg.close()
 
@@ -907,6 +914,11 @@ def repack_bootimg(kernel_addr=None, ramdisk_addr=None, second_addr=None, tags_a
     else:
         dtimg = ''
 
+    if os.path.exists('seAndroid'):
+        seAndroid = 'seAndroid'
+    else:
+        seAndroid = ''
+
     sys.stderr.write('arguments: [kernel_addr] [ramdisk_addr] [second_addr] [tags_addr] [cmdline] [page_size] [padding_size]\n')
     metadata = {}
     if os.path.exists('bootimg.json'):
@@ -980,10 +992,28 @@ def repack_bootimg(kernel_addr=None, ramdisk_addr=None, second_addr=None, tags_a
                 'ramdisk': open(ramdisk, 'rb'),
                 'second': second and open(second, 'rb') or None,
                 'dtimg': dtimg and open(dtimg, 'rb') or None,
+                'seAndroid': seAndroid and open(seAndroid, 'rb') or None,
                 'page_size': page_size,
                 'padding_size': padding_size,
                 }
     write_bootimg(**options)
+
+    if os.path.exists('ramdisk.cpio.gz'):
+        os.unlink('ramdisk.cpio.gz')
+    if os.path.exists('ramdisk.gz'):
+        os.unlink('ramdisk.gz')
+    if os.path.exists('second.gz'):
+        os.unlink('second.gz')
+    if os.path.exists('second'):
+        os.unlink('second')
+    if os.path.exists('dt.img'):
+        os.unlink('dt.img')
+    if os.path.exists('seAndroid'):
+        os.unlink('seAndroid')
+    if os.path.exists('bootimg.json'):
+        os.unlink('bootimg.json')
+    if os.path.exists('kernel'):
+        os.unlink('kernel')
 
 def unpack_bootimg(bootimg=None):
     if bootimg is None:
@@ -992,6 +1022,7 @@ def unpack_bootimg(bootimg=None):
     sys.stderr.write('bootimg file: %s\n' % bootimg)
     sys.stderr.write('output: kernel[.gz] ramdisk[.gz] second[.gz]\n')
     parse_bootimg(open(bootimg, 'rb'))
+    os.unlink(bootimg)
 
 def unpack_updata(updata=None, debug=False):
     if updata is None and os.path.exists('UPDATA.APP'):
